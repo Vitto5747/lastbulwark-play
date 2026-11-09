@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Последний бастион</title>
+  <!-- SDK Яндекс Игр: на сервере Яндекса файл лежит по этому пути. -->
+  <script src="/sdk.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b1020; }
+    #unity-canvas { width: 100%; height: 100%; display: block; background: #0b1020; touch-action: none; outline: none; }
+    #loader { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-family: Georgia, serif; color: #f4d58d; background: radial-gradient(circle at 50% 45%, #3a2f1a 0%, #0b1020 60%); }
+    #loader h1 { font-size: 7vmin; margin: 0 0 4vmin; letter-spacing: 0.05em; text-shadow: 0 0 24px rgba(255, 196, 92, 0.6); }
+    #bar { width: 50vmin; height: 1.6vmin; border-radius: 1vmin; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+    #fill { width: 0; height: 100%; background: linear-gradient(90deg, #f6b84e, #ffe08a); transition: width 0.2s; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loader"><h1>Последний бастион</h1><div id="bar"><div id="fill"></div></div></div>
+  <script>
+    // SDK инициализируем сразу, параллельно с загрузкой игры. Без SDK (локальный запуск) игра работает без рекламы.
+    // Сбой инициализации на плохой сети повторяем дважды: без SDK нет ни облака, ни рекламы до конца сессии.
+    (function initSdk(attempt) {
+      if (!window.YaGames) { window.ysdkFailed = true; return; }
+      YaGames.init().then(function (ysdk) { window.ysdk = ysdk; }).catch(function (e) {
+        console.warn('YaGames.init failed', e);
+        if (attempt < 2) setTimeout(function () { initSdk(attempt + 1); }, 1500 * (attempt + 1));
+        else window.ysdkFailed = true;
+      });
+    })(0);
+
+    // Контекстное меню и прокрутка страницы мешают на телефоне.
+    document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    window.addEventListener('wheel', function (e) { e.preventDefault(); }, { passive: false });
+
+    var buildUrl = 'Build';
+    var config = {
+      dataUrl: buildUrl + '/Yandex.data.unityweb',
+      frameworkUrl: buildUrl + '/Yandex.framework.js.unityweb',
+      codeUrl: buildUrl + '/Yandex.wasm.unityweb',
+      streamingAssetsUrl: 'StreamingAssets',
+      companyName: "ART COMPANY",
+      productName: "Последний бастион",
+      productVersion: "0.1.0",
+      // Чёткая картинка на телефонах, но не больше 2x: иначе браузер не вытянет.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+    };
+
+    var script = document.createElement('script');
+    script.src = buildUrl + '/Yandex.loader.js';
+    script.onload = function () {
+      createUnityInstance(document.querySelector('#unity-canvas'), config, function (progress) {
+        document.querySelector('#fill').style.width = (100 * progress) + '%';
+      }).then(function (instance) {
+        window.unityInstance = instance;
+        document.querySelector('#loader').style.display = 'none';
+      }).catch(function (message) {
+        alert(message);
+      });
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
