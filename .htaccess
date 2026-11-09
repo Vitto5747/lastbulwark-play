@@ -1,0 +1,22 @@
+# Запрет индексации поисковиками для всех файлов сайта
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow, noarchive"
+</IfModule>
+
+# Сжатые gzip файлы Unity WebGL (.unityweb)
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/octet-stream .unityweb
+  AddType application/javascript .js
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "\.wasm\.unityweb$">
+    Header set Content-Type "application/wasm"
+  </FilesMatch>
+  <FilesMatch "\.js\.unityweb$">
+    Header set Content-Type "application/javascript"
+  </FilesMatch>
+  <FilesMatch "\.unityweb$">
+    Header set Content-Encoding "gzip"
+  </FilesMatch>
+</IfModule>
