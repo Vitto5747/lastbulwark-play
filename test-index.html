@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover">
+  <!-- Запуск с экрана «Домой» — как приложение, без адресной строки и вкладок браузера. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Бастион">
+  <meta name="theme-color" content="#0f0b09">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="icon.png">
+  <title>Последний бастион</title>
+  <!-- SDK Яндекс Игр: на сервере Яндекса файл лежит по этому пути. -->
+  <script src="/sdk.js"></script>
+  <!-- Картинки экрана загрузки грузим первыми, раньше сборки игры: иначе секунду виден пустой тёмный фон. -->
+  <link rel="preload" as="image" href="loading-map.webp">
+  <link rel="preload" as="image" href="loading-logo.webp">
+  <style>
+    /* Экран загрузки — макет Figma «1 · Запуск: загрузка» 578:9262 (1920×1080):
+       - фон: картинка карты бастиона (Фон экрана · Вид=Карта, вписана во весь экран) со своей слабой виньеткой
+         (#050302 · 0.92 при непрозрачности заливки 0.2 = 0.184), поверх —
+         тёмный фон кита (Вид=Тёмный: #1B222A → #080C10 сверху вниз + виньетка #04080D) с непрозрачностью 0.9;
+       - герб-логотип «Последний бастион» картинкой 708×531 в (606, 135);
+       - тонкая полоса прогресса кита 1591×10 в (164, 745): дорожка #2D2521, обводка 2 px #0E0A08 снаружи,
+         заливка #FFB04A → #E2731B сверху вниз; подписи «Загрузка… N%» в макете нет;
+       - внизу логотипы CYBERTi | Vorobey Art белым с непрозрачностью 0.4, 601×91 в (660, 855).
+       Сцена 1920×1080 масштабируется целиком (как CanvasScaler игры), фон — во всё окно (обрезается по краям). */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f0b09; }
+    #unity-canvas { width: 100%; height: 100%; display: block; background: #0f0b09; touch-action: none; outline: none; }
+    #loader { position: absolute; inset: 0; overflow: hidden; background: #0f0b09; }
+    /* Виньетки Figma — эллипс с центром в середине и радиусами в полширины и полвысоты: в CSS это closest-side. */
+    #loader-map, #loader-dark { position: absolute; inset: 0; }
+    #loader-map { background:
+        radial-gradient(closest-side, rgba(0, 0, 0, 0) 35%, rgba(5, 3, 2, 0.184) 100%),
+        url('loading-map.webp') center / cover no-repeat; }
+    #loader-dark { opacity: 0.9; background:
+        radial-gradient(closest-side, rgba(0, 0, 0, 0) 35%, rgba(4, 8, 13, 0.92) 100%),
+        linear-gradient(180deg, #1b222a 0%, #080c10 100%); }
+    #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: 50% 50%;
+      transform: translate(-50%, -50%) scale(var(--scale, 0.5)); }
+    #logo { position: absolute; left: 606px; top: 135px; width: 708px; height: 531px; display: block; }
+    /* Полоса: скругление 10 в макете упирается в половину высоты (5 px); внешняя обводка 2 px — тенью без размытия,
+       она скругляется так же, как обводка Figma (5 + 2 = 7 px). */
+    #bar { position: absolute; left: 164px; top: 745px; width: 1591px; height: 10px; border-radius: 5px; overflow: hidden;
+      background: #2d2521; box-shadow: 0 0 0 2px #0e0a08; }
+    #fill { width: 0; height: 100%; border-radius: 5px; background: linear-gradient(180deg, #ffb04a 0%, #e2731b 100%);
+      transition: width 0.2s; }
+    /* Непрозрачность 0.4 уже внутри SVG (как у рамки «Frame 65» в макете). */
+    #credits { position: absolute; left: 660px; top: 855px; width: 601px; height: 91px; display: block; }
+    /* «Во весь экран» — тёмная кнопка кита с бронзовой рамкой. */
+    #fullscreen { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom));
+      width: 44px; height: 44px; border: 2px solid #c39255; border-radius: 10px; background: linear-gradient(180deg, #2b211c, #16110f);
+      color: #ffffff; font-size: 24px; line-height: 38px; text-align: center; cursor: pointer; display: none; z-index: 10; padding: 0; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <button id="fullscreen" type="button" title="Во весь экран" aria-label="Во весь экран">&#x26F6;</button>
+  <div id="loader"><div id="loader-map"></div><div id="loader-dark"></div>
+    <div id="stage"><img id="logo" src="loading-logo.webp" alt="Последний бастион" draggable="false">
+      <div id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="fill"></div></div>
+      <img id="credits" src="loading-credits.svg" alt="CYBERTi · Vorobey Art" draggable="false"></div></div>
+  <script>
+    // SDK инициализируем сразу, параллельно с загрузкой игры. Без SDK (локальный запуск) игра работает без рекламы.
+    // Сбой инициализации на плохой сети повторяем дважды: без SDK нет ни облака, ни рекламы до конца сессии.
+    (function initSdk(attempt) {
+      if (!window.YaGames) { window.ysdkFailed = true; return; }
+      YaGames.init().then(function (ysdk) { window.ysdk = ysdk; }).catch(function (e) {
+        console.warn('YaGames.init failed', e);
+        if (attempt < 2) setTimeout(function () { initSdk(attempt + 1); }, 1500 * (attempt + 1));
+        else window.ysdkFailed = true;
+      });
+    })(0);
+
+    // Контекстное меню и прокрутка страницы мешают на телефоне.
+    document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    window.addEventListener('wheel', function (e) { e.preventDefault(); }, { passive: false });
+
+    // Во весь экран вне Яндекс Игр (там полноэкранный режим даёт сама площадка): при первом касании
+    // и по кнопке. Если игру запустили с экрана «Домой», браузерных панелей и так нет — кнопка не нужна.
+    (function setupFullscreen() {
+      if (window.YaGames) return;
+      var root = document.documentElement;
+      var request = root.requestFullscreen || root.webkitRequestFullscreen;
+      var standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+      if (!request || standalone) return;
+      var button = document.getElementById('fullscreen');
+      function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+      function enter() {
+        if (isFull()) return;
+        try {
+          var result = request.call(root, { navigationUI: 'hide' });
+          if (result && result.catch) result.catch(function () {});
+        } catch (e) {}
+      }
+      function update() { button.style.display = isFull() ? 'none' : 'block'; }
+      button.addEventListener('click', function (e) { e.stopPropagation(); enter(); });
+      document.addEventListener('pointerup', function first() {
+        document.removeEventListener('pointerup', first, true);
+        enter();
+      }, true);
+      document.addEventListener('fullscreenchange', update);
+      document.addEventListener('webkitfullscreenchange', update);
+      update();
+    })();
+
+    // Сцена загрузки 1920×1080 вписывается в окно целиком. Подписи с процентом в макете нет — только полоса
+    // (процент остаётся для экранных чтецов в aria-valuenow).
+    function setProgress(progress) {
+      var percent = Math.max(0, Math.min(100, Math.round(100 * progress)));
+      document.querySelector('#fill').style.width = percent + '%';
+      document.querySelector('#bar').setAttribute('aria-valuenow', percent);
+    }
+    function fitLoader() {
+      var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      document.querySelector('#stage').style.setProperty('--scale', scale);
+    }
+    fitLoader();
+    setProgress(0);
+    window.addEventListener('resize', fitLoader);
+
+    var buildUrl = 'Build';
+    var config = {
+      dataUrl: buildUrl + '/Yandex.data.unityweb',
+      frameworkUrl: buildUrl + '/Yandex.framework.js.unityweb',
+      codeUrl: buildUrl + '/Yandex.wasm.unityweb',
+      streamingAssetsUrl: 'StreamingAssets',
+      companyName: "ART COMPANY",
+      productName: "Последний бастион",
+      productVersion: "0.1.0",
+      // Чёткая картинка на телефонах, но не больше 2x: иначе браузер не вытянет.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+    };
+
+    var script = document.createElement('script');
+    script.src = buildUrl + '/Yandex.loader.js';
+    script.onload = function () {
+      createUnityInstance(document.querySelector('#unity-canvas'), config, setProgress).then(function (instance) {
+        window.unityInstance = instance;
+        document.querySelector('#loader').style.display = 'none';
+        window.removeEventListener('resize', fitLoader);
+      }).catch(function (message) {
+        alert(message);
+      });
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
